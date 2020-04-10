@@ -1,0 +1,69 @@
+#!/usr/bin/python2.7 -tt
+from socket import *
+
+PATH_TO_SERVER_PORT = 'server_port' 
+HOSTNAME_TO_CONNECT = 'localhost'
+COUNTER_ADDRESS = '/counter'
+MESSAGE_BLOCK_SIZE = 512
+ENDING_STRING_LENGTH = 4
+GET_PLUS_SPACE_LENGTH = 4
+GET_LENGTH = 3
+GET_WORD = 'GET'
+NOT_END_OF_MESSAGE = -1
+MESSAGE_FORMAT_ERROR = -1
+
+ERROR_MESSAGE = """HTTP/1.1 404 Not Found\r\n
+Content-type: text/html\r\n
+Content-length: 113\r\n\r\n
+<html><head><title>Not Found</title></head><body>\r\n
+Sorry, the object you requested was not found.\r\n
+</body></html>\r\n\r\n"""
+
+HTTP_FIRST_PART_ANSWER = """HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: """
+
+
+def receiveCompleteMessage(serverSocket):
+	endString = '\r'+'\n'+'\r'+'\n'
+	completeMessage = ""
+	messageEndIndex = NOT_END_OF_MESSAGE
+	while(messageEndIndex== NOT_END_OF_MESSAGE):
+		completeMessage = completeMessage + serverSocket.recv(MESSAGE_BLOCK_SIZE)
+		messageEndIndex = completeMessage.find(endString)
+	return completeMessage[:messageEndIndex+ENDING_STRING_LENGTH]
+	
+def sendCompleteMessage(messageToSend, serverSocket):
+	bytesTransferred = 0
+	remainingBytesToSend = len(messageToSend)
+	currentPlaceAtMessage = 0
+	while(remainingBytesToSend > 0):
+		bytesTransferred = serverSocket.send(messageToSend[currentPlaceAtMessage:])
+		remainingBytesToSend = remainingBytesToSend - bytesTransferred
+		currentPlaceAtMessage = currentPlaceAtMessage + bytesTransferred
+	
+def getAddress(completeMessage):
+	if(completeMessage[:GET_LENGTH] == GET_WORD):
+		spaceAfterGetIndex = completeMessage.find(' ', GET_PLUS_SPACE_LENGTH, len(completeMessage))
+		return completeMessage[GET_PLUS_SPACE_LENGTH:spaceAfterGetIndex]
+	else:
+		return MESSAGE_FORMAT_ERROR
+	
+def createAnswerMessage(numOfClients):
+	endString = '\r'+'\n'+'\r'+'\n'
+	httpAnswer = ""
+	httpAnswer = httpAnswer+HTTP_FIRST_PART_ANSWER+str(len(str(numOfClients)))+endString+str(numOfClients)+endString
+	return httpAnswer
+
+serverSocket = socket()
+f = open(PATH_TO_SERVER_PORT, "r") 
+serverPort = int(f.read())
+serverSocket.connect((HOSTNAME_TO_CONNECT, serverPort))
+numOfClients = 0
+while (True):
+	receivedMessage = receiveCompleteMessage(serverSocket)
+	currAddress = getAddress(receivedMessage)	
+	if(currAddress == COUNTER_ADDRESS):
+		numOfClients = numOfClients + 1
+		httpAnswer = createAnswerMessage(numOfClients)
+	else:
+		httpAnswer = ERROR_MESSAGE
+	sendCompleteMessage(httpAnswer, serverSocket)
